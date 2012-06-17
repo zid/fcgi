@@ -64,7 +64,6 @@ struct session {
 	struct env env;
 	struct fcgi_record r;
 	int active;
-	int stdout;	/* Tells us whether the client is still sending us data */
 };
 
 static struct session sessions[32];
@@ -98,7 +97,6 @@ static void env_add_record(struct session *s, u8 *name, u32 namelen, u8 *value, 
 	{
 		s->env.max_records = 32;
 		s->env.record = malloc(sizeof(struct env_record) * 32);
-		nlog("Allocated %d bytes for record pointers\n", sizeof(struct env_record) * 32);
 	}
 
 	if(s->env.max_records == s->env.num_records)
@@ -162,7 +160,6 @@ static void read_pairs(int sock, struct session *s)
 
 		value = stream;
 		stream += valuelen;
-		nlog("Adding record\n");
 		env_add_record(s, name, namelen, value, valuelen);
 	}
 
@@ -206,8 +203,6 @@ static int do_request(int sock)
 
 	id = get_record(sock);
 
-	nlog("Got request type %d, id %d\n", sessions[id].r.type, id);
-
 	switch(sessions[id].r.type)
 	{
 		case BEGIN_REQUEST:
@@ -244,8 +239,6 @@ static void stdout_start(int sock, int id, int len)
 	buf[7] = 0;
 
 	write(sock, buf, 8); /* FCGI_STDOUT start*/
-
-	sessions[id].stdout = 1;
 }
 
 static void stdout_finish(int sock, int id)
@@ -261,8 +254,6 @@ static void stdout_finish(int sock, int id)
 	buf[6] = 0;
 	buf[7] = 0;
 	write(sock, buf, 8);	/* FCGI_STDOUT finish */
-
-	sessions[id].stdout = 0;
 }
 
 static void request_complete(int sock, int id)
@@ -292,8 +283,7 @@ static void request_complete(int sock, int id)
 
 static void stdout_send(int sock, int id, const char *msg, int len)
 {
-	if(!sessions[id].stdout)
-		stdout_start(sock, id, len);
+	stdout_start(sock, id, len);
 	
 	write(sock, msg, len);
 }
@@ -327,7 +317,6 @@ int fcgi_accept(void)
 			break;
 	}
 
-	nlog("Accepted, returnd id %d\n", id);
 	return id;
 }
 
